@@ -103,6 +103,7 @@ def init_distributed_ds(args):
 
     if args.local_rank is not None:
         device = args.local_rank
+
     torch.cuda.set_device(device)
 
     deepspeed.init_distributed(timeout=timedelta(minutes=30))

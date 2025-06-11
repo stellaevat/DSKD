@@ -67,7 +67,7 @@ class DualSpaceKD(VariousDivergence):
         # student space
         t2s_hiddens = distiller.projectors["t2s"](teacher_hiddens)
         t2s_logits = t2s_hiddens.matmul(
-            distiller.student_model.lm_head.weight.detach().transpose(-1, -2)
+            distiller.student_model.lm_head.weight.detach().transpose(-1, -2) # matrix multiply with the weights of the last student layer (prediction head) - why not same as line 81?
         )
         t2s_ce_loss = self.compute_cross_entropy_loss(t2s_logits, target)[0]
         
@@ -78,7 +78,7 @@ class DualSpaceKD(VariousDivergence):
 
         # teacher space
         s2t_hiddens = distiller.projectors["s2t"](hiddens)
-        s2t_logits = distiller.teacher_model.lm_head(s2t_hiddens)
+        s2t_logits = distiller.teacher_model.lm_head(s2t_hiddens) # TODO: why can we not do this for t2s too?
         s2t_kd_loss = self.compute_forward_kl_divergence(
             s2t_logits, teacher_outputs.logits, teacher_target, reduction="none"
         )

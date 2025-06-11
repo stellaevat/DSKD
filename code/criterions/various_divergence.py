@@ -100,7 +100,7 @@ class VariousDivergence(CrossEntropyLoss):
         lprobs = torch.log_softmax(logits, -1, dtype=torch.float32)
         teacher_probs = torch.softmax(teacher_logits, -1, dtype=torch.float32)
         teacher_lprobs = torch.log_softmax(teacher_logits, -1, dtype=torch.float32)
-        kld = (teacher_probs * (teacher_lprobs - lprobs))
+        kld = (teacher_probs * (teacher_lprobs - lprobs)) # definition of KL divergence
         inf_mask = logits.isinf()
         kld = kld.masked_fill_(inf_mask, 0.0).sum(-1)
         

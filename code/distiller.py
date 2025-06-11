@@ -53,7 +53,7 @@ class Distiller(nn.Module):
             for stu_id in self.stu2tea_id_mapping:
                 self.stu2tea_id_mapping[stu_id] = self.stu2tea_id_mapping[stu_id][:max_align_num] + \
                     [self.stu2tea_id_mapping[stu_id][-1]] \
-                        * max(0, max_align_num - len(self.stu2tea_id_mapping[stu_id]))
+                        * max(0, max_align_num - len(self.stu2tea_id_mapping[stu_id])) # TODO: wtaf
                 
             self.tea2stu_id_mapping = torch.LongTensor(list(self.tea2stu_id_mapping.values())).to(device)
             self.stu2tea_id_mapping_tea = torch.LongTensor(list(self.stu2tea_id_mapping.values())).to(device)

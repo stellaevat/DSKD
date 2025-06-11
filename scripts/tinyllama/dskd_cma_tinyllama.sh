@@ -1,6 +1,58 @@
 #! /bin/bash
-GPUS=(0 1 2 3)
-export CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${GPUS[*]}")
+#!
+#! Example SLURM job script for Wilkes3 (AMD EPYC 7763, ConnectX-6, A100)
+#! Last updated: Fri 30 Jul 11:07:58 BST 2021
+#!
+
+#!#############################################################
+#!#### Modify the options in this section as appropriate ######
+#!#############################################################
+
+#! sbatch directives begin here ###############################
+#! Name of the job:
+#SBATCH -J gpujob
+#! Which project should be charged (NB Wilkes2 projects end in '-GPU'):
+#SBATCH -A MLMI-set56-SL2-GPU
+#! How many whole nodes should be allocated?
+#SBATCH --nodes=1
+#! How many (MPI) tasks will there be in total?
+#! Note probably this should not exceed the total number of GPUs in use.
+#SBATCH --ntasks=1
+#! Specify the number of GPUs per node (between 1 and 4; must be 4 if nodes>1).
+#! Note that the job submission script will enforce no more than 32 cpus per GPU.
+#SBATCH --gres=gpu:1
+#! How much wallclock time will be required?
+#SBATCH --time=07:00:00
+#! What types of email messages do you wish to receive?
+#SBATCH --mail-type=NONE
+#! Uncomment this to prevent the job from being requeued (e.g. if
+#! interrupted by node failure or system downtime):
+##SBATCH --no-requeue
+
+#! Do not change:
+#SBATCH -p ampere
+
+#! sbatch directives end here (put any additional directives above this line)
+
+#! ######################################################################################
+#! ######################################################################################
+
+#! Optionally modify the environment seen by the application
+#! (note that SLURM reproduces the environment at submission irrespective of ~/.bashrc):
+. /etc/profile.d/modules.sh                # Leave this line (enables the module command)
+module purge                               # Removes all modules still loaded
+module load rhel8/default-amp              # REQUIRED - loads the basic environment
+
+source /home/${USER}/.bashrc
+source /home/${USER}/miniforge3/bin/activate
+mamba activate "/home/${USER}/miniforge3/envs/dskd"
+
+
+# GPUS=(0 1 2 3)
+# export CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${GPUS[*]}")
+GPUS=(0)
+export CUDA_VISIBLE_DEVICES=0
+export CUDA_LAUNCH_BLOCKING=1
 
 MASTER_ADDR=localhost
 MASTER_PORT=66$(($RANDOM%90+10))
@@ -15,14 +67,14 @@ DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE \
                   --master_port $MASTER_PORT"
 
 # model
-BASE_PATH=path_to_dskd_project
+BASE_PATH="/home/${USER}/rds/hpc-work/DSKD"
 CKPT_TYPE="tinyllama"
 CKPT_NAME="tinyllama-1.1b-3T"
 CKPT_PATH="${BASE_PATH}/model_hub/${CKPT_TYPE}/${CKPT_NAME}"
 TEACHER_MODEL_TYPE="mistral"
 TEACHER_MODEL_NAME="mistral-7b-v0.1"
 TEACHER_MODEL_PATH="${BASE_PATH}/model_hub/${TEACHER_MODEL_TYPE}/${TEACHER_MODEL_NAME}"
-TEACHER_PEFT_PATH="path_to_teacher_sft_ckpt"
+# TEACHER_PEFT_PATH="${BASE_PATH}/model_hub/${TEACHER_MODEL_TYPE}/${TEACHER_MODEL_NAME}"
 # data
 DATA_DIR="${BASE_PATH}/data/dolly/"
 # task
@@ -63,7 +115,7 @@ OPTS+=" --model-path ${CKPT_PATH}"
 OPTS+=" --n-gpu ${GPUS_PER_NODE}"
 OPTS+=" --teacher-model-type ${TEACHER_MODEL_TYPE}"
 OPTS+=" --teacher-model-path ${TEACHER_MODEL_PATH}"
-OPTS+=" --teacher-peft-path ${TEACHER_PEFT_PATH}"
+# OPTS+=" --teacher-peft-path ${TEACHER_PEFT_PATH}"
 OPTS+=" --teacher-model-fp16"
 OPTS+=" --gradient-checkpointing"
 # data
@@ -128,7 +180,8 @@ export NCCL_DEBUG=""
 export WANDB_DISABLED=True
 export TF_CPP_MIN_LOG_LEVEL=3
 export PYTHONPATH=${BASE_PATH}
+export TORCHELASTIC_ERROR_FILE=${SAVE_PATH}/error.log
 CMD="torchrun ${DISTRIBUTED_ARGS} ${BASE_PATH}/code/distillation.py ${OPTS}"
 
 ${CMD} \
->> ${SAVE_PATH}/train.log 2>&1 &
+>> ${SAVE_PATH}/train.log 2>&1

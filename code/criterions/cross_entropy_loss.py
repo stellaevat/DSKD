@@ -68,8 +68,8 @@ class CrossEntropyLoss(nn.Module):
             torch.zeros_like(target),
             target
         )
-        target_logits = logits.gather(-1, pos_target.unsqueeze(-1)).squeeze(-1)
-        non_target_logits = (logits.sum(-1) - target_logits) / (logits.shape[-1] - 1)
+        target_logits = logits.gather(-1, pos_target.unsqueeze(-1)).squeeze(-1) # What logit value was assigned to each correct token
+        non_target_logits = (logits.sum(-1) - target_logits) / (logits.shape[-1] - 1) # Equal distribution of remaining logits over the wrong tokens (??)
         target_logits = target_logits.masked_fill_(pad_mask, 0.0).sum()
         non_target_logits = non_target_logits.masked_fill_(pad_mask, 0.0).sum()
         

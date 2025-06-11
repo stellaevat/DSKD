@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
+from torch.distributed.elastic.multiprocessing.errors import record
 from torch.utils.data import DataLoader, DistributedSampler
 from torch.optim import AdamW
 import deepspeed
@@ -502,7 +503,7 @@ def evaluate(args, tokenizer, model, dataset, split, device, repeat_times=None):
     model.train()
     return eval_info["loss"], eval_res
 
-
+@record
 def main():
     torch.backends.cudnn.enabled = False
     
@@ -571,6 +572,7 @@ def main():
     optimizer = distiller.add_optimizer_param_group(optimizer)
     lr_scheduler = get_learning_rate_scheduler(args, optimizer)
 
+    # os.environ["LOCAL_RANK"] = "0" # RANK CHANGE
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
         model=distiller,
         optimizer=optimizer,

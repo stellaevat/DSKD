@@ -90,10 +90,10 @@ class DualSpaceKDWithCMA(VariousDivergence):
             and hasattr(distiller.teacher_model.model, "wte"):
             tea_embed_tokens = distiller.teacher_model.transformer.wte
         else:
-            raise NotImplementedError
+            raise NotImplementedError 
 
         formal_target = torch.where(pad_mask, target, torch.zeros_like(target))
-        formal_input = torch.where(pad_mask, input_data["input_ids"], torch.zeros_like(target))
+        formal_input = torch.where(pad_mask, input_data["input_ids"], torch.zeros_like(target)) # TODO: Why same mask as target??
         stu_input_embeds = stu_embed_tokens(formal_input).detach()
         stu_target_embeds = stu_embed_tokens(formal_target).detach()
 
@@ -105,7 +105,7 @@ class DualSpaceKDWithCMA(VariousDivergence):
         stu_index_embeds = torch.cat([stu_input_embeds, stu_target_embeds], -1)
         tea_index_embeds = torch.cat([tea_input_embeds, tea_target_embeds], -1)
 
-        norm_tea_index_embeds = tea_index_embeds / tea_index_embeds.std()
+        norm_tea_index_embeds = tea_index_embeds / tea_index_embeds.std() # Normalise "for faster convergence"
         norm_tea_target_embeds = tea_target_embeds / tea_target_embeds.std()
         norm_teacher_hiddens = teacher_hiddens / teacher_hiddens.std()
 
@@ -120,16 +120,16 @@ class DualSpaceKDWithCMA(VariousDivergence):
         align = stu_q_hiddens.matmul(tea_k_hiddens.transpose(-1, -2))
         align = align / math.sqrt(2 * teacher_hiddens.shape[-1])
         align_mask = pad_mask.float().unsqueeze(-1) * teacher_pad_mask.float().unsqueeze(1)
-        align = align + (1.0 - align_mask) * (-100000)
+        align = align + (1.0 - align_mask) * (-100000) # Make masked values very small
 
         t2s_weight = torch.softmax(align, -1)        
         t2s_hiddens = t2s_weight.matmul(tea_v_hiddens).to(hiddens)
         t2s_logits = t2s_hiddens.matmul(
             distiller.student_model.lm_head.weight.detach().transpose(-1, -2)
-        )
-        t2s_ce_loss = self.compute_cross_entropy_loss(t2s_logits, target)[0]
+        ) # Equation 4 (except where is the softmax?)
+        t2s_ce_loss = self.compute_cross_entropy_loss(t2s_logits, target)[0] # Equation 5
         t2s_acc_mask = t2s_logits.argmax(-1).eq(target)
-        t2s_acc = (t2s_acc_mask * pad_mask).sum()
+        t2s_acc = (t2s_acc_mask * pad_mask).sum() # TODO: Absolute value rather than ratio (see line 154)
         max_probs = (t2s_logits.softmax(-1).max(-1)[0] * pad_mask).sum()
         log["t2s_ce_loss"] = t2s_ce_loss
         log["t2s_acc"] = t2s_acc
@@ -138,20 +138,20 @@ class DualSpaceKDWithCMA(VariousDivergence):
         if not self.args.only_save_projector:  # skip if only train projectors (pre-train projectors)
             t2s_kd_loss = self.dist_func(
                 outputs.logits, t2s_logits.detach(), target, reduction="none", use_tea_temp=True
-            )
-            t2s_kd_loss = (t2s_kd_loss * pad_mask * t2s_acc_mask).sum()
+            ) # Equation 6
+            t2s_kd_loss = (t2s_kd_loss * pad_mask * t2s_acc_mask).sum() 
 
             s2t_weight = torch.softmax(align.transpose(-1, -2), -1)
             s2t_hiddens = s2t_weight.matmul(stu_v_hiddens).to(hiddens)
             s2t_logits = s2t_hiddens.matmul(
             distiller.teacher_model.lm_head.weight.detach().transpose(-1, -2)
-            )
+            ) # Equation 8 (except where is the softmax?)
 
             s2t_kd_loss = self.compute_forward_kl_divergence(
                 s2t_logits, teacher_outputs.logits, teacher_target, reduction="none"
-            )
+            ) # Equation 9
             s2t_kd_loss = (s2t_kd_loss * teacher_pad_mask).sum()
-            s2t_acc = (s2t_logits.argmax(-1).eq(teacher_target) * teacher_pad_mask).sum() * pad_mask.sum() / teacher_pad_mask.sum()
+            s2t_acc = (s2t_logits.argmax(-1).eq(teacher_target) * teacher_pad_mask).sum() * pad_mask.sum() / teacher_pad_mask.sum() # TODO: Why mul/div by these?
 
             kd_loss = t2s_ce_loss + t2s_kd_loss + s2t_kd_loss
             log["t2s_kd_loss"] = t2s_kd_loss
