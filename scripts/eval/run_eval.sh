@@ -1,8 +1,10 @@
 #!/bin/bash
-GPUS=(0 1 2 3)
-WORK_DIR=path_to_dskd_project
+GPUS=(0)
+WORK_DIR=.
 MASTER_PORT=66$(($RANDOM%90+10))
 DEVICE=$(IFS=,; echo "${GPUS[*]}")
+
+export CUDA_LAUNCH_BLOCKING=1
 
 CKPT_PATH=${1}
 BATCH_SIZE=${2-32}

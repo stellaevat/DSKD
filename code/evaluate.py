@@ -3,6 +3,7 @@ import os
 
 import torch
 import torch.distributed as dist
+from torch.distributed.elastic.multiprocessing.errors import record
 import deepspeed
 
 import json
@@ -39,7 +40,7 @@ def setup_model(args, ds_config, device):
     # get the memory usage
     return model
 
-
+@record
 def main():
     torch.backends.cudnn.enabled = False
     

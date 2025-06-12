@@ -1,6 +1,6 @@
 #!/bin/bash
 GPUS=(0 1 2 3)
-WORK_DIR=path_to_dskd_project
+WORK_DIR=.
 MASTER_PORT=66$(($RANDOM%90+10))
 DEVICE=$(IFS=,; echo "${GPUS[*]}")
 # echo ${DEVICE}

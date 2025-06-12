@@ -572,7 +572,7 @@ def main():
     optimizer = distiller.add_optimizer_param_group(optimizer)
     lr_scheduler = get_learning_rate_scheduler(args, optimizer)
 
-    # os.environ["LOCAL_RANK"] = "0" # RANK CHANGE
+
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
         model=distiller,
         optimizer=optimizer,

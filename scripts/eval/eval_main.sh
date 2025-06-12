@@ -1,5 +1,6 @@
 #! /bin/bash
 set -e
+export CUDA_LAUNCH_BLOCKING=1
 export CUDA_VISIBLE_DEVICES=${1}
 MASTER_ADDR=localhost
 MASTER_PORT=${2}
@@ -68,6 +69,7 @@ export NCCL_DEBUG=""
 export TOKENIZERS_PARALLELISM=false
 export PYTHONIOENCODING=utf-8
 export PYTHONPATH=${BASE_PATH}
+export TORCHELASTIC_ERROR_FILE=${SAVE_PATH}/error.log
 CMD="torchrun ${DISTRIBUTED_ARGS} ${BASE_PATH}/code/evaluate.py ${OPTS}"
 echo ${CMD}
 
