@@ -44,35 +44,54 @@ class DistillDataset(Dataset):
                 self.answers = [x["output"] if isinstance(x["output"], list) else [x["output"]] for x in raw_data]
             
             log_rank("Processing dataset for student model (and all teacher models)...")  
-            seg = np.iinfo(np.int32).max * 2 + 1        
+            seg = np.iinfo(np.int32).max * 2 + 1  
             for data in tqdm(raw_data, disable=(dist.get_rank() != 0)):
-                student_prompt_ids = self.student_tokenizer.encode(
-                    data["prompt"], add_special_tokens=False
+                student_prompt_tokenized = self.student_tokenizer.encode_plus(
+                    data["prompt"], add_special_tokens=False, return_offsets_mapping=True
                 )
+                student_prompt_ids = student_prompt_tokenized["input_ids"]
                 student_prompt_ids = student_prompt_ids[:self.max_prompt_length]
-                student_response_ids = self.student_tokenizer.encode(
-                    data["output"], add_special_tokens=False
+                student_prompt_offsets = [end for (_, end) in student_prompt_tokenized["offset_mapping"]]
+                student_prompt_offsets = student_prompt_offsets[:self.max_prompt_length]
+                
+                student_response_tokenized = self.student_tokenizer.encode_plus(
+                    data["output"], add_special_tokens=False, return_offsets_mapping=True
                 )
+                student_response_ids = student_response_tokenized["input_ids"]
                 student_response_ids = student_response_ids \
                                      + [self.student_tokenizer.eos_token_id]
+                student_response_offsets = [end for (_, end) in student_response_tokenized["offset_mapping"]]
+                student_response_offsets.append(-1)
+
                 tokenized_data = {
                     "student_input_ids": student_prompt_ids + [seg] + student_response_ids,
+                    "student_offsets": student_prompt_offsets + [seg] + student_response_offsets
                 }
         
                 for model_type in self.teacher_tokenizers:
                     if self.teacher_tokenizers[model_type] is None: continue
                         
-                    teacher_prompt_ids = self.teacher_tokenizers[model_type].encode(
-                        data["prompt"], add_special_tokens=False
+                    teacher_prompt_tokenized = self.teacher_tokenizers[model_type].encode_plus(
+                        data["prompt"], add_special_tokens=False, return_offsets_mapping=True
                     )
+                    teacher_prompt_ids = teacher_prompt_tokenized["input_ids"]
                     teacher_prompt_ids = teacher_prompt_ids[:self.max_prompt_length]
-                    teacher_response_ids = self.teacher_tokenizers[model_type].encode(
-                        data["output"], add_special_tokens=False
+                    teacher_prompt_offsets = [end for (_, end) in teacher_prompt_tokenized["offset_mapping"]]
+                    teacher_prompt_offsets = teacher_prompt_offsets[:self.max_prompt_length]
+
+                    teacher_response_tokenized = self.teacher_tokenizers[model_type].encode_plus(
+                        data["output"], add_special_tokens=False, return_offsets_mapping=True
                     )
+                    teacher_response_ids = teacher_response_tokenized["input_ids"]
                     teacher_response_ids = teacher_response_ids \
                                             + [self.teacher_tokenizers[model_type].eos_token_id]
+                    teacher_response_offsets = [end for (_, end) in teacher_response_tokenized["offset_mapping"]]
+                    teacher_response_offsets.append(-1)
+
                     tokenized_data[f"teacher_{model_type}_input_ids"] = \
                         teacher_prompt_ids + [seg] + teacher_response_ids
+                    tokenized_data[f"teacher_{model_type}_offsets"] = \
+                        teacher_prompt_offsets + [seg] + teacher_response_offsets
 
                 dataset.append(tokenized_data)
             return dataset
@@ -92,7 +111,13 @@ class DistillDataset(Dataset):
         )
         input_ids = input_ids[:self.max_length]
         input_len = len(input_ids)
+        offsets = np.array(samp["student_offsets"])
+        offsets = np.concatenate(
+            [offsets[:source_len], offsets[source_len+1:]], axis=0
+        )
+        offsets = offsets[:self.max_length]
         model_data["input_ids"][i][:input_len-1] = torch.tensor(input_ids[:-1], dtype=torch.long)
+        model_data["offsets"][i][:input_len-1] = torch.tensor(offsets[:-1], dtype=torch.long)
         model_data["attention_mask"][i][:input_len-1] = 1.0
         if self.args.model_type in ["gpt2"]:
             model_data["position_ids"][i][:input_len-1] = torch.arange(0, input_len-1, dtype=torch.long)
@@ -112,8 +137,15 @@ class DistillDataset(Dataset):
             )
             t_input_ids = t_input_ids[:self.max_length]
             t_input_len = len(t_input_ids)
+            t_offsets = np.array(samp[f"teacher_{model_type}_offsets"])
+            t_offsets = np.concatenate(
+                [t_offsets[:t_source_len], t_offsets[t_source_len+1:]], axis=0
+            )
+            t_offsets = t_offsets[:self.max_length]
             teacher_model_data[model_type]["input_ids"][i][:t_input_len-1] = \
                 torch.tensor(t_input_ids[:-1], dtype=torch.long)
+            teacher_model_data[model_type]["offsets"][i][:t_input_len-1] = \
+                torch.tensor(t_offsets[:-1], dtype=torch.long)
             teacher_model_data[model_type]["attention_mask"][i][:t_input_len-1] = 1.0
             if model_type in ["gpt2"]:
                 teacher_model_data[model_type]["position_ids"][i][:t_input_len-1] = \
@@ -140,6 +172,8 @@ class DistillDataset(Dataset):
         model_data = {
             "input_ids": torch.ones(bs, max_length, dtype=torch.long) \
                         * self.student_tokenizer.eos_token_id,
+            "offsets": torch.ones(bs, max_length, dtype=torch.long) \
+                      * -1,
             "attention_mask": torch.zeros(bs, max_length),
         }
         
@@ -161,6 +195,8 @@ class DistillDataset(Dataset):
             model_type: {
                 "input_ids": torch.ones(bs, max_length, dtype=torch.long) \
                             * self.teacher_tokenizers[model_type].eos_token_id,
+                "offsets": torch.ones(bs, max_length, dtype=torch.long) \
+                          * -1,
                 "attention_mask": torch.zeros(bs, max_length),
             } for model_type in self.teacher_tokenizers
         }
