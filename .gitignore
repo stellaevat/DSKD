@@ -173,6 +173,12 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Project-specific
+# Models and SLURM outputs
 model_hub/
 *.out
+*.pt
+*.bin
+*.bin.index.json
+*.safetensors
+*.safetensors.index.json
+
